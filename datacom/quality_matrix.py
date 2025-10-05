@@ -1,43 +1,97 @@
+"""Quality matrix calculation for network links."""
 import numpy as np
 import pandas as pd
 import json
-from network_topology import NetworkTopology
+import sys
+import os
 
-def calculate_cuality_matrix(modules, snr_db_values):
-    topology = NetworkTopology(modules)
-    topology.create_graph()
-    connections = topology.get_connections()
-    
-    quality_matrix = pd.DataFrame(index=modules.keys(), columns=modules.keys())
-    
-    for mod_a, mod_b, _ in connections:
-        quality_metrics = {}
-        for snr_db in snr_db_values:
-            results = topology.calculate_link_quality(mod_a, mod_b, snr_db)
-            quality_metrics[snr_db] = results
-        quality_matrix.at[mod_a, mod_b] = quality_metrics
-        quality_matrix.at[mod_b, mod_a] = quality_metrics  # Assuming symmetric links
-    
-    return quality_matrix
+if __name__ == "__main__" and __package__ is None:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from datacom.network_topology import NetworkTopology
+else:
+    from .network_topology import NetworkTopology
 
-def calculate_per(ber):
-    if ber < 0 or ber > 1:
-        raise ValueError("BER must be between 0 and 1")
-    return 1 - (1 - ber) ** 100  # Assuming packet size of 100 bits
+def calculate_quality_matrix(network):
+    """Calculate quality matrix for all module pairs."""
+    module_ids = list(network.modules.keys())
+    matrix = {}
+    
+    for mod_a in module_ids:
+        matrix[mod_a] = {}
+        for mod_b in module_ids:
+            if mod_a == mod_b:
+                matrix[mod_a][mod_b] = 0.0
+            else:
+                # Get SNR from graph edge data
+                if network.graph.has_edge(mod_a, mod_b):
+                    snr_db = network.graph[mod_a][mod_b].get('snr_db', 0)
+                    # Convert SNR to realistic BER
+                    ber = _snr_to_ber(snr_db)
+                    per = calculate_per(ber)
+                    matrix[mod_a][mod_b] = per
+                else:
+                    matrix[mod_a][mod_b] = 1.0  # No connection
+    
+    return matrix
+
+def _snr_to_ber(snr_db):
+    """Convert SNR to realistic BER values."""
+    if snr_db > 20:
+        return 1e-6
+    elif snr_db > 15:
+        return 1e-5
+    elif snr_db > 10:
+        return 1e-4
+    elif snr_db > 5:
+        return 1e-3
+    elif snr_db > 0:
+        return 1e-2
+    elif snr_db > -5:
+        return 0.1
+    else:
+        return 0.5
+
+def calculate_per(ber, packet_size_bits=1000):
+    """Calculate Packet Error Rate from BER."""
+    if ber <= 0:
+        return 0.0
+    if ber >= 1:
+        return 1.0
+    
+    # Use more realistic PER calculation
+    if ber < 1e-4:
+        # For very low BER, approximate as linear
+        per = packet_size_bits * ber
+    else:
+        # Exact formula for higher BER
+        per = 1 - (1 - ber) ** packet_size_bits
+    
+    return float(np.clip(per, 0.0, 1.0))
 
 def export_to_csv(matrix, filename):
-    matrix.to_csv(filename)
+    """Export matrix to CSV."""
+    df = pd.DataFrame(matrix)
+    df.to_csv(filename)
 
 def export_to_json(matrix, filename):
-    matrix_dict = matrix.applymap(lambda x: x if isinstance(x, dict) else str(x)).to_dict()
+    """Export matrix to JSON."""
     with open(filename, 'w') as f:
-        json.dump(matrix_dict, f, indent=4)
-        
-def visualize_matrix(matrix):
-    import matplotlib.pyplot as plt
-    import seaborn as sns
+        json.dump(matrix, f, indent=4)
+
+
+if __name__ == "__main__":
+    print("Testing quality matrix module...")
+    from datacom.network_topology import NetworkTopology
     
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(matrix.isnull(), cbar=False, cmap='viridis')
-    plt.title('Quality Matrix Visualization')
-    plt.show()
+    network = NetworkTopology()
+    network.add_module("A", "power", (0, 0))
+    network.add_module("B", "comms", (10, 0))
+    network.create_graph()
+    
+    matrix = calculate_quality_matrix(network)
+    print(f"\nQuality matrix: {matrix}")
+    
+    print("\nTesting PER calculation:")
+    for ber in [0.000001, 0.0001, 0.001, 0.01, 0.1]:
+        per = calculate_per(ber)
+        print(f"  BER={ber:.6f} -> PER={per:.6f}")

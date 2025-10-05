@@ -1,0 +1,5 @@
+,power,life_support,medical,comms
+power,0.0,0.001,0.001,0.001
+life_support,0.001,0.0,0.001,0.001
+medical,0.001,0.001,0.0,0.001
+comms,0.001,0.001,0.001,0.0
