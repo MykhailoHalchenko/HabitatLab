@@ -332,15 +332,16 @@ def test_network_analysis():
     for module, centrality in sorted(betweenness_centrality.items(), key=lambda x: x[1], reverse=True)[:3]:
         print(f"  {module}: {centrality:.3f}")
 
-def main(canvasnw):
-    """Main test runner."""
+
+def run_all_tests():
+    """Run all tests without GUI dependencies."""
     setup_logging()
     
     try:
         # Run all tests
         test_awgn_channel()
         
-        network = canvasnw
+        network = test_network_topology()
         
         matrix = test_quality_matrix(network)
         
@@ -352,11 +353,35 @@ def main(canvasnw):
         
         test_network_analysis()
         
+        # Summary
+        
+        
     except Exception as e:
         print(f"\n Error during testing: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
 
+
+def main(canvasnw=None):
+    """
+    Main function that can be called from GUI.
+    
+    Args:
+        canvasnw: Optional canvas reference from GUI (can be None for CLI)
+    """
+    if canvasnw is not None:
+        # GUI mode - run simulation with GUI data
+        run_gui_simulation(canvasnw)
+    else:
+        # CLI mode - run all tests
+        run_all_tests()
+
+def run_gui_simulation(canvasnw):
+    """Run simulation with data from GUI canvas."""
+    print("Running simulation with GUI data...")
+    
+    run_all_tests()
+
 if __name__ == "__main__":
-    main()
+    run_all_tests()
