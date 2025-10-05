@@ -1,24 +1,26 @@
 import tkinter as tk
 from tkinter import messagebox
+import main
 
 def evaluate_habitat():
+    main.main()
     messagebox.showinfo("Evaluate", "Запущено аналіз ML та Sionna.")
 
 def update_metrics():
-    area = 'area count'
-    modules = 'modulec count'
-    connection_status = "Connected"
+    area = '0'
+    modules = '0'
+    connection_status = "Запустіть аналіз"
 
     area_var.set(f"Площа: {area} м²")
     modules_var.set(f"Модулі: {modules}")
     status_var.set(f"Зв'язок: {connection_status}")
 
 def start_draw(event):
-    canvas.last_x, canvas.last_y = event.x, event.y
+    canvas.start_x, canvas.start_y = event.x, event.y
+    canvas.current_rect = canvas.create_rectangle(event.x, event.y, event.x, event.y, outline="black", width=2)
 
-def draw(event):
-    canvas.create_line(canvas.last_x, canvas.last_y, event.x, event.y, fill="black", width=2)
-    canvas.last_x, canvas.last_y = event.x, event.y
+def draw_rectangle(event):
+    canvas.coords(canvas.current_rect, canvas.start_x, canvas.start_y, event.x, event.y)
 
 root = tk.Tk()
 root.title("HabitatLab")
@@ -28,7 +30,8 @@ canvas = tk.Canvas(root, bg="white", width=600, height=400)
 canvas.pack(pady=10)
 
 canvas.bind("<Button-1>", start_draw)
-canvas.bind("<B1-Motion>", draw)
+canvas.bind("<B1-Motion>", draw_rectangle)
+
 
 metrics_frame = tk.Frame(root)
 metrics_frame.pack(pady=10)
