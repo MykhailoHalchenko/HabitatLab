@@ -332,7 +332,7 @@ def test_network_analysis():
     for module, centrality in sorted(betweenness_centrality.items(), key=lambda x: x[1], reverse=True)[:3]:
         print(f"  {module}: {centrality:.3f}")
 
-def main():
+def main(canvasnw):
     """Main test runner."""
     setup_logging()
     
@@ -340,7 +340,7 @@ def main():
         # Run all tests
         test_awgn_channel()
         
-        network = test_network_topology()
+        network = canvasnw
         
         matrix = test_quality_matrix(network)
         
