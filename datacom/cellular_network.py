@@ -1,6 +1,6 @@
 """
 5G/6G cellular network simulation for space habitat inter-module communication.
-Simplified version without complex Sionna dependencies.
+Realistic models with accurate path loss and throughput calculations.
 """
 import numpy as np
 import tensorflow as tf
@@ -21,8 +21,9 @@ class Cellular5GSimulator:
         self.carrier_frequency = carrier_frequency
         self.num_tx_ant = num_tx_ant
         self.num_rx_ant = num_rx_ant
+        self.technology = "5G"
         
-        # 5G parameters
+        # 5G parameters (will be adjusted based on SNR)
         self.modulation = "64-QAM"
         self.coding_rate = 0.7
         self.bandwidth = 100e6  # 100 MHz
@@ -39,7 +40,7 @@ class Cellular5GSimulator:
         # Calculate BER based on SNR and modulation
         ber = self._calculate_ber(effective_snr_db)
         
-        # Calculate throughput
+        # Calculate throughput (adaptive based on SNR)
         throughput_mbps = self._calculate_throughput(effective_snr_db)
         
         return {
@@ -54,72 +55,101 @@ class Cellular5GSimulator:
             'coding_rate': self.coding_rate,
             'num_tx_antennas': self.num_tx_ant,
             'num_rx_antennas': self.num_rx_ant,
-            'technology': '5G'
+            'technology': self.technology
         }
     
     def _calculate_path_loss(self, distance):
         """
-        Calculate path loss using 3GPP Indoor Hotspot (InH) model.
+        Calculate path loss using realistic 3GPP Indoor Hotspot (InH) model.
         """
         if distance < 1:
             distance = 1
         
-        # 3GPP InH path loss model: PL = 32.4 + 17.3*log10(d) + 20*log10(fc)
         fc_ghz = self.carrier_frequency / 1e9
-        pl_db = 32.4 + 17.3 * np.log10(distance) + 20 * np.log10(fc_ghz)
         
-        return pl_db
+        # 3GPP InH path loss model with distance breakpoints
+        if distance <= 10:
+            # Short distance: PL = 32.4 + 17.3*log10(d) + 20*log10(fc)
+            pl_db = 32.4 + 17.3 * np.log10(distance) + 20 * np.log10(fc_ghz)
+        else:
+            # Longer distance: higher path loss exponent
+            pl_db = 32.4 + 17.3 * np.log10(10) + 20 * np.log10(fc_ghz) + \
+                    10 * 2.5 * np.log10(distance/10)
+        
+        return min(pl_db, 120)  # Reasonable maximum
     
     def _calculate_ber(self, snr_db):
         """
-        Calculate BER based on SNR and modulation scheme.
+        Calculate realistic BER based on SNR and modulation scheme.
         """
+        if snr_db <= -5:
+            return 0.5  # Random bits below -5 dB
+        
         snr_linear = 10 ** (snr_db / 10)
         
-        # Approximate BER for 64-QAM in AWGN
-        if snr_db > 20:
-            ber = 1e-6
-        elif snr_db > 15:
-            ber = 1e-4
-        elif snr_db > 10:
-            ber = 1e-3
-        elif snr_db > 5:
-            ber = 1e-2
-        elif snr_db > 0:
-            ber = 0.1
-        else:
-            ber = 0.5
+        # Realistic BER approximation for 64-QAM in AWGN
+        # Based on Q-function approximation for M-QAM
+        if self.modulation == "64-QAM":
+            ber = 0.2 * np.exp(-snr_linear / 21)
+        elif self.modulation == "16-QAM":
+            ber = 0.2 * np.exp(-snr_linear / 10)
+        elif self.modulation == "QPSK":
+            ber = 0.5 * np.exp(-snr_linear / 2)
+        else:  # BPSK
+            ber = 0.5 * np.exp(-snr_linear)
             
-        # Add MIMO diversity gain
-        diversity_gain = np.log2(self.num_tx_ant * self.num_rx_ant)
+        # MIMO diversity gain
+        diversity_gain = np.sqrt(self.num_tx_ant * self.num_rx_ant)
         effective_ber = ber / diversity_gain
         
-        return float(np.clip(effective_ber, 1e-7, 0.5))
+        return float(np.clip(effective_ber, 1e-9, 0.5))
     
     def _calculate_throughput(self, snr_db):
         """
-        Calculate throughput using Shannon capacity with practical efficiency.
+        Calculate realistic throughput with adaptive modulation and coding.
         """
-        snr_linear = 10 ** (snr_db / 10)
+        if snr_db <= 0:
+            return 0.0
         
-        # Spectral efficiency (bits/s/Hz)
+        # Adaptive Modulation and Coding (AMC) based on SNR
         if snr_db > 25:
-            efficiency = 4.5  # 64-QAM high coding rate
+            efficiency = 6.0  # 256-QAM
+            coding_rate = 0.9
+            self.modulation = "256-QAM"
+            self.num_bits_per_symbol = 8
         elif snr_db > 20:
-            efficiency = 4.0
+            efficiency = 4.5  # 64-QAM  
+            coding_rate = 0.75
+            self.modulation = "64-QAM"
+            self.num_bits_per_symbol = 6
         elif snr_db > 15:
-            efficiency = 3.0
+            efficiency = 3.0  # 16-QAM
+            coding_rate = 0.6
+            self.modulation = "16-QAM"
+            self.num_bits_per_symbol = 4
         elif snr_db > 10:
-            efficiency = 2.0
+            efficiency = 2.0  # QPSK
+            coding_rate = 0.5
+            self.modulation = "QPSK"
+            self.num_bits_per_symbol = 2
         elif snr_db > 5:
-            efficiency = 1.0
+            efficiency = 1.0  # BPSK
+            coding_rate = 0.3
+            self.modulation = "BPSK"
+            self.num_bits_per_symbol = 1
         else:
-            efficiency = 0.5
-            
-        # MIMO spatial multiplexing gain
-        spatial_streams = min(self.num_tx_ant, self.num_rx_ant)
-        total_efficiency = efficiency * spatial_streams * self.coding_rate
+            efficiency = 0.5  # Very low rate
+            coding_rate = 0.2
+            self.modulation = "BPSK"
+            self.num_bits_per_symbol = 1
         
+        self.coding_rate = coding_rate
+        
+        # MIMO spatial multiplexing
+        spatial_streams = min(self.num_tx_ant, self.num_rx_ant)
+        total_efficiency = efficiency * spatial_streams * coding_rate
+        
+        # Throughput in Mbps
         throughput_mbps = (self.bandwidth * total_efficiency) / 1e6
         
         return throughput_mbps
@@ -139,85 +169,115 @@ class Cellular6GSimulator(Cellular5GSimulator):
             **kwargs
         )
         
+        self.technology = "6G"
         # 6G enhanced parameters
-        self.modulation = "256-QAM"
-        self.coding_rate = 0.85
         self.bandwidth = 400e6  # 400 MHz
-        self.num_bits_per_symbol = 8  # for 256-QAM
         self.is_thz_band = carrier_frequency > 90e9
         
     def _calculate_path_loss(self, distance):
         """
-        Calculate path loss for THz band (6G model).
+        Calculate realistic path loss for THz band (6G model).
         """
         if distance < 0.1:
             distance = 0.1
         
         if self.is_thz_band:
-            # THz path loss model
+            # THz path loss model with atmospheric absorption
             fc_thz = self.carrier_frequency / 1e12
             
             # Free space path loss
             pl_db = 20 * np.log10(distance) + 20 * np.log10(fc_thz) + 32.45
             
-            # Add atmospheric absorption (simplified model)
-            absorption_db_per_m = 0.1 * fc_thz
-            pl_db += absorption_db_per_m * distance
+            # Atmospheric absorption (significant for THz)
+            # Water vapor and oxygen absorption increase with frequency
+            absorption_coeff = 0.3 * fc_thz  # dB/m (increases with frequency)
+            pl_db += absorption_coeff * distance
             
-            return pl_db
+            # Additional losses for indoor environment
+            pl_db += 5  # Wall/obstacle penetration losses
+            
         else:
             # Use standard 5G model for sub-THz
-            return super()._calculate_path_loss(distance)
+            pl_db = super()._calculate_path_loss(distance)
+        
+        return min(pl_db, 150)  # THz has higher maximum losses
     
     def _calculate_ber(self, snr_db):
         """
-        Calculate BER for 6G with advanced coding.
+        Calculate BER for 6G with advanced coding and massive MIMO.
         """
-        # 6G has better error correction
+        if snr_db <= -10:
+            return 0.5  # THz more sensitive to low SNR
+        
         snr_linear = 10 ** (snr_db / 10)
         
-        if snr_db > 25:
-            ber = 1e-7
-        elif snr_db > 20:
-            ber = 1e-5
-        elif snr_db > 15:
-            ber = 1e-4
-        elif snr_db > 10:
-            ber = 1e-3
-        elif snr_db > 5:
-            ber = 1e-2
-        else:
-            ber = 0.1
+        # 6G uses advanced coding (LDPC, polar codes)
+        if self.modulation == "256-QAM":
+            ber = 0.15 * np.exp(-snr_linear / 42)
+        elif self.modulation == "64-QAM":
+            ber = 0.15 * np.exp(-snr_linear / 25)
+        elif self.modulation == "16-QAM":
+            ber = 0.2 * np.exp(-snr_linear / 12)
+        elif self.modulation == "QPSK":
+            ber = 0.3 * np.exp(-snr_linear / 3)
+        else:  # BPSK
+            ber = 0.4 * np.exp(-snr_linear)
             
-        # Enhanced MIMO gains for 6G
-        diversity_gain = np.log2(self.num_tx_ant * self.num_rx_ant) * 1.5
+        # Enhanced MIMO gains for 6G (massive MIMO)
+        diversity_gain = np.sqrt(self.num_tx_ant * self.num_rx_ant) * 1.2
         effective_ber = ber / diversity_gain
         
-        return float(np.clip(effective_ber, 1e-8, 0.5))
+        return float(np.clip(effective_ber, 1e-10, 0.5))
     
     def _calculate_throughput(self, snr_db):
         """
-        Calculate 6G throughput with enhanced efficiency.
+        Calculate 6G throughput with enhanced efficiency and massive MIMO.
         """
-        snr_linear = 10 ** (snr_db / 10)
+        if snr_db <= -5:
+            return 0.0
         
-        # 6G spectral efficiency
+        # 6G supports higher order modulation and better coding
         if snr_db > 30:
-            efficiency = 8.0  # 256-QAM very high coding rate
+            efficiency = 8.0  # 1024-QAM possible in 6G
+            coding_rate = 0.95
+            self.modulation = "1024-QAM"
+            self.num_bits_per_symbol = 10
         elif snr_db > 25:
-            efficiency = 7.0
+            efficiency = 7.0  # 256-QAM
+            coding_rate = 0.9
+            self.modulation = "256-QAM"
+            self.num_bits_per_symbol = 8
         elif snr_db > 20:
-            efficiency = 6.0
+            efficiency = 6.0  # 64-QAM
+            coding_rate = 0.85
+            self.modulation = "64-QAM"
+            self.num_bits_per_symbol = 6
         elif snr_db > 15:
-            efficiency = 5.0
+            efficiency = 4.0  # 16-QAM
+            coding_rate = 0.7
+            self.modulation = "16-QAM"
+            self.num_bits_per_symbol = 4
         elif snr_db > 10:
-            efficiency = 4.0
+            efficiency = 2.5  # QPSK
+            coding_rate = 0.6
+            self.modulation = "QPSK"
+            self.num_bits_per_symbol = 2
+        elif snr_db > 5:
+            efficiency = 1.2  # BPSK with better coding
+            coding_rate = 0.4
+            self.modulation = "BPSK"
+            self.num_bits_per_symbol = 1
         else:
-            efficiency = 2.0
-            
-        # Massive MIMO spatial multiplexing
-        spatial_streams = min(self.num_tx_ant, self.num_rx_ant)
-        total_efficiency = efficiency * spatial_streams * self.coding_rate
+            efficiency = 0.8
+            coding_rate = 0.3
+            self.modulation = "BPSK"
+            self.num_bits_per_symbol = 1
+        
+        self.coding_rate = coding_rate
+        
+        # Massive MIMO spatial multiplexing (more streams possible)
+        spatial_streams = min(self.num_tx_ant, self.num_rx_ant) * 1.5  # 6G advantage
+        total_efficiency = efficiency * spatial_streams * coding_rate
         
         throughput_mbps = (self.bandwidth * total_efficiency) / 1e6
         
@@ -244,6 +304,7 @@ def compare_5g_6g(distance=10, snr_db=20):
     print(f"  BER: {results_5g['ber']:.6f}")
     print(f"  Throughput: {results_5g['throughput_mbps']:.2f} Mbps")
     print(f"  Modulation: {results_5g['modulation']}")
+    print(f"  Coding Rate: {results_5g['coding_rate']:.2f}")
     print(f"  Antennas: {results_5g['num_tx_antennas']}x{results_5g['num_rx_antennas']} MIMO")
     
     print("\n6G Results (100 GHz THz):")
@@ -252,7 +313,23 @@ def compare_5g_6g(distance=10, snr_db=20):
     print(f"  BER: {results_6g['ber']:.6f}")
     print(f"  Throughput: {results_6g['throughput_mbps']:.2f} Mbps")
     print(f"  Modulation: {results_6g['modulation']}")
+    print(f"  Coding Rate: {results_6g['coding_rate']:.2f}")
     print(f"  Antennas: {results_6g['num_tx_antennas']}x{results_6g['num_rx_antennas']} MIMO")
+    
+    # Performance comparison
+    throughput_ratio = results_6g['throughput_mbps'] / max(results_5g['throughput_mbps'], 0.1)
+    ber_ratio = results_6g['ber'] / max(results_5g['ber'], 1e-9)
+    
+    print(f"\nPerformance Comparison:")
+    print(f"  Throughput (6G/5G): {throughput_ratio:.2f}x")
+    print(f"  BER (6G/5G): {ber_ratio:.2f}x")
+    
+    if throughput_ratio > 1 and ber_ratio < 1:
+        print("  → 6G performs better")
+    elif throughput_ratio < 1 and ber_ratio > 1:
+        print("  → 5G performs better")  
+    else:
+        print("  → Mixed performance")
     
     return {'5g': results_5g, '6g': results_6g}
 
@@ -262,17 +339,17 @@ if __name__ == "__main__":
     print("  Testing 5G/6G Cellular Network Simulation")
     print("="*60)
     
-    print("\nTest 1: 5G transmission")
-    print("-" * 40)
+    print("\nTest 1: 5G transmission at different distances")
+    print("-" * 50)
     sim_5g = Cellular5GSimulator()
-    result = sim_5g.simulate_transmission("power", "comms", distance=10, snr_db=20)
-    print(f"Distance: {result['distance']}m")
-    print(f"BER: {result['ber']:.6f}")
-    print(f"Throughput: {result['throughput_mbps']:.2f} Mbps")
+    for dist in [5, 10, 20]:
+        result = sim_5g.simulate_transmission("power", "comms", distance=dist, snr_db=20)
+        print(f"Distance: {dist:2d}m -> SNR: {result['snr_db']:6.2f} dB, "
+              f"BER: {result['ber']:.2e}, Throughput: {result['throughput_mbps']:6.1f} Mbps")
     
-    print("\n\nTest 2: 5G vs 6G comparison at different distances")
+    print("\n\nTest 2: 5G vs 6G comparison")
     print("=" * 60)
-    for dist in [5, 10, 15]:
+    for dist in [5, 10, 15, 20]:
         compare_5g_6g(dist, snr_db=20)
     
     print("\n" + "="*60)
