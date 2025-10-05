@@ -336,10 +336,6 @@ def main():
     """Main test runner."""
     setup_logging()
     
-    print("\n" + "="*60)
-    print("🏗️  HabitatLab Communication System Tests")
-    print("="*60)
-    
     try:
         # Run all tests
         test_awgn_channel()
@@ -355,27 +351,6 @@ def main():
         test_cellular_networks()
         
         test_network_analysis()
-        
-        # Summary
-        print_separator("TEST SUMMARY")
-        print("\n All tests completed successfully!")
-        print("\n Generated files:")
-        print("  - storage/comm_results/quality_matrix.csv")
-        print("  - datacom.log")
-        print("\n Tested features:")
-        print("  - AWGN channel simulation")
-        print("  - Network topology management") 
-        print("  - Quality matrix calculation")
-        print("  - Failure simulation and resilience analysis")
-        print("  - 5G NR communication (3.5 GHz, MIMO)")
-        print("  - 6G THz communication (100 GHz, advanced MIMO)")
-        print("  - Advanced network analysis (centrality, connectivity)")
-        print("\n🏗️ Architecture:")
-        print("  - Python-based simulation framework")
-        print("  - NetworkX for topology analysis")
-        print("  - TensorFlow for signal processing (AWGN)")
-        print("  - Realistic channel models for space habitat")
-        
         
     except Exception as e:
         print(f"\n Error during testing: {e}")
