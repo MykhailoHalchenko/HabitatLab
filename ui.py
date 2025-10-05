@@ -1,9 +1,34 @@
 import tkinter as tk
 from tkinter import messagebox
 import main
+from datacom.network_topology import NetworkTopology
+canvas_nodes = []
+
+def convert_canvas_to_topology():
+    topology = NetworkTopology()
+    for node in canvas_nodes:
+        topology.add_module(node["id"], node["type"], node["position"])
+    topology.create_graph()
+    return topology
+
+def finalize_rectangle(event):
+    x1, y1 = canvas.start_x, canvas.start_y
+    x2, y2 = event.x, event.y
+    rect = canvas.create_rectangle(x1, y1, x2, y2, outline="black", width=2)
+
+    center_x = (x1 + x2) / 2
+    center_y = (y1 + y2) / 2
+    node_id = f"module_{len(canvas_nodes)+1}"
+    node_type = "generic"
+
+    canvas_nodes.append({
+        "id": node_id,
+        "type": node_type,
+        "position": (center_x, center_y)
+    })
 
 def evaluate_habitat():
-    main.main()
+    main.main(convert_canvas_to_topology())
     messagebox.showinfo("Evaluate", "Запущено аналіз ML та Sionna.")
 
 def update_metrics():
@@ -31,7 +56,6 @@ canvas.pack(pady=10)
 
 canvas.bind("<Button-1>", start_draw)
 canvas.bind("<B1-Motion>", draw_rectangle)
-
 
 metrics_frame = tk.Frame(root)
 metrics_frame.pack(pady=10)
