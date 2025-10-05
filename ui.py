@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 import main
 from datacom.network_topology import NetworkTopology
+from datacom.storage_manager import save_plan_to_json, load_plan_from_json, export_metrics_to_csv, plan_from_network_topology
 canvas_nodes = []
 
 def convert_canvas_to_topology():
@@ -46,7 +47,17 @@ def start_draw(event):
 
 def draw_rectangle(event):
     canvas.coords(canvas.current_rect, canvas.start_x, canvas.start_y, event.x, event.y)
+    
+def save_current_network_to_plan(network, filename=None):
+    plan = plan_from_network_topology(network)
+    path = save_plan_to_json(plan, filename)
+    print(f"Plan saved to: {path}")
+    return path
 
+def export_simulation_metrics(metrics, filename=None):
+    path = export_metrics_to_csv(metrics, filename)
+    print(f"Metrics exported to: {path}")
+    return path
 root = tk.Tk()
 root.title("HabitatLab")
 root.geometry("800x600")
@@ -74,3 +85,4 @@ evaluate_button = tk.Button(root, text="Evaluate", command=evaluate_habitat, bg=
 evaluate_button.pack(pady=10)
 
 root.mainloop()
+
